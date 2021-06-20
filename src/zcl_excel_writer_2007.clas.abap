@@ -7136,6 +7136,9 @@ METHOD create_xl_table.
 
   lo_element_root->append_child( new_child = lo_element ).
 
+  DATA lv_column_int TYPE i.
+  DATA lv_column TYPE zexcel_cell_column_alpha.
+  lv_column_int = zcl_excel_common=>convert_column2int( io_table->settings-top_left_column ).
   LOOP AT io_table->fieldcat INTO ls_fieldcat WHERE dynpfld = abap_true.
     lo_element2 = lo_document->create_simple_element_ns( name   = 'tableColumn'
                                                                 parent = lo_element ).
@@ -7145,6 +7148,33 @@ METHOD create_xl_table.
     lo_element2->set_attribute_ns( name  = 'id'
                                   value = lv_value ).
     lv_value = ls_fieldcat-scrtext_l.
+    DATA: lv_i         TYPE i,
+          lo_worksheet TYPE REF TO zcl_excel_worksheet,
+          lo_iterator  TYPE REF TO cl_object_collection_iterator,
+          lo_table     TYPE REF TO zcl_excel_table.
+    lv_i = 1.
+    WHILE lv_i <= excel->get_worksheets_size( ).
+      lo_worksheet = excel->get_worksheet_by_index( lv_i ).
+      lo_iterator = lo_worksheet->get_tables_iterator( ).
+      WHILE abap_true = lo_iterator->has_next( ).
+        lo_table ?= lo_iterator->get_next( ).
+        IF lo_table = io_table.
+          EXIT.
+        ENDIF.
+      ENDWHILE.
+      IF lo_table = io_table.
+        EXIT.
+      ENDIF.
+      FREE lo_table.
+      lv_i = lv_i + 1.
+    ENDWHILE.
+    lo_worksheet->get_cell(
+      EXPORTING
+        ip_column  = lv_column_int
+        ip_row     = io_table->settings-top_left_row
+      IMPORTING
+        ep_value   = lv_value ).
+    ADD 1 TO lv_column_int.
     lo_element2->set_attribute_ns( name  = 'name'
                                   value = lv_value ).
 
