@@ -209,6 +209,8 @@ CLASS lcl_perform IMPLEMENTATION.
           bytecount   TYPE i,
           length      TYPE i,
           add_selopt  TYPE flag.
+    DATA: cancel     TYPE abap_bool,
+          parameters TYPE TABLE OF rsparamsl_255.
 
 
     READ TABLE t_reports INTO wa_report INDEX e_row-index.
@@ -234,6 +236,30 @@ CLASS lcl_perform IMPLEMENTATION.
         add_selopt = 'X'.
       ENDIF.
     ENDIF.
+    FIND 'FORM demo_show_get_parameters' IN TABLE t_source IGNORING CASE.
+    IF sy-subrc = 0.
+      CLEAR cancel.
+      TRY.
+          PERFORM demo_show_get_parameters IN PROGRAM (wa_report-progname)
+            TABLES
+              parameters
+            CHANGING
+              cancel.
+          IF cancel IS NOT INITIAL.
+            RETURN.
+          ELSE.
+            SUBMIT (wa_report-progname) AND RETURN       "#EC CI_SUBMIT
+                    WITH SELECTION-TABLE parameters
+                    WITH p_backfn = filename
+                    WITH rb_back  = 'X'
+                    WITH rb_down  = ' '
+                    WITH rb_send  = ' '
+                    WITH rb_show  = ' '.
+          ENDIF.
+        CATCH cx_sy_dyn_call_illegal_form.
+          RETURN.
+      ENDTRY.
+    ELSE.
     IF add_selopt IS INITIAL.
       SUBMIT (wa_report-progname) AND RETURN                        "#EC CI_SUBMIT
               WITH p_backfn = filename
@@ -248,6 +274,7 @@ CLASS lcl_perform IMPLEMENTATION.
               WITH rb_down  = ' '
               WITH rb_send  = ' '
               WITH rb_show  = ' '.
+    ENDIF.
     ENDIF.
 
     OPEN DATASET filename FOR INPUT IN BINARY MODE.
