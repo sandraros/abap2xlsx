@@ -196,6 +196,47 @@ CLASS lcl_excel_cloner IMPLEMENTATION.
     ENDIF.
     ADD 1 TO count_worksheets_cloned.
 
+    " TABLES
+
+    DATA(tables_iterator) = io_input_worksheet->get_tables_iterator( ).
+    WHILE tables_iterator->has_next( ).
+      DATA(table) = CAST zcl_excel_table( tables_iterator->get_next( ) ).
+
+      DATA(components) = VALUE abap_component_tab(
+              FOR <field> IN table->fieldcat
+                ( name = <field>-fieldname
+                  type = cl_abap_elemdescr=>get_string( ) ) ).
+      DATA(rtti_table) = cl_abap_tabledescr=>get( p_line_type = cl_abap_structdescr=>get( components ) ).
+      DATA dref_table TYPE REF TO data.
+      FIELD-SYMBOLS <table> TYPE STANDARD TABLE.
+      CREATE DATA dref_table TYPE HANDLE rtti_table.
+      ASSIGN dref_table->* TO <table>.
+
+*io_input_worksheet->get_
+      result->bind_table(
+        EXPORTING
+          ip_table            = <table>
+          it_field_catalog    = table->fieldcat
+          is_table_settings   = table->settings
+*          iv_default_descr    =
+*          iv_no_line_if_empty = ABAP_FALSE
+*        IMPORTING
+*          es_table_settings   =
+      ).
+*        CATCH zcx_excel.    "
+    ENDWHILE.
+
+    " RANGES
+
+    DATA(ranges_iterator) = result->get_ranges_iterator( ).
+    WHILE ranges_iterator->has_next( ).
+      DATA(range) = CAST zcl_excel_range( ranges_iterator->get_next( ) ).
+*      range->
+    ENDWHILE.
+
+
+    " ROWS/COLUMNS/CELLS
+
     zcl_excel_common=>convert_range2column_a_row(
       EXPORTING
         i_range        = COND #( LET dim = io_input_worksheet->get_dimension_range( ) IN WHEN dim CA ':' THEN dim ELSE |{ dim }:{ dim }| )
@@ -237,14 +278,14 @@ CLASS lcl_excel_cloner IMPLEMENTATION.
             ep_style   = lo_style
             ep_formula = formula ).
 
-        result->set_cell(
-          EXPORTING
-            ip_column            = column_int
-            ip_row               = row
-            ip_value             = value
-            ip_formula           = formula
-            ip_style             = COND #( WHEN lo_style IS BOUND THEN mapping-styles[ input = lo_style ]-output->get_guid( ) )
-        ).
+        IF value IS NOT INITIAL OR formula IS NOT INITIAL OR lo_style IS BOUND.
+          result->set_cell(
+              ip_column  = column_int
+              ip_row     = row
+              ip_value   = value
+              ip_formula = formula
+              ip_style   = COND #( WHEN lo_style IS BOUND THEN mapping-styles[ input = lo_style ]-output->get_guid( ) ) ).
+        ENDIF.
 
         column_int = column_int + 1.
       ENDWHILE.
@@ -378,8 +419,8 @@ FORM popup_f4
     value      TYPE clike.
 
   CASE |{ tabname }-{ fieldname }|.
-  WHEN 'ADMI_FILES-FILENAME'.
-    PERFORM popup_f4_filename CHANGING value.
+    WHEN 'ADMI_FILES-FILENAME'.
+      PERFORM popup_f4_filename CHANGING value.
   ENDCASE.
 
 ENDFORM.

@@ -20,7 +20,7 @@
     <item>
      <ID>S</ID>
      <KEY>TEMPLATE</KEY>
-     <ENTRY>Workbook to recreate abap2xlsx</ENTRY>
+     <ENTRY>To be recreated by abap2xlsx</ENTRY>
      <LENGTH>38</LENGTH>
     </item>
    </TPOOL>
