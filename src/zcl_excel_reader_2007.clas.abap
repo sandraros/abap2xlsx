@@ -89,6 +89,13 @@ protected section.
   types:
     gtt_external_hyperlinks TYPE HASHED TABLE OF gts_external_hyperlink WITH UNIQUE KEY id .
   types:
+    BEGIN OF t_table,
+      id     TYPE string,
+      target TYPE string,
+    END OF t_table .
+  types:
+    t_tables TYPE HASHED TABLE OF t_table WITH UNIQUE KEY id .
+  types:
     BEGIN OF ty_ref_formulae,
       sheet   TYPE REF TO zcl_excel_worksheet,
       row     TYPE i,
@@ -224,6 +231,14 @@ protected section.
       !IO_IXML_WORKSHEET type ref to IF_IXML_DOCUMENT
       !IO_WORKSHEET type ref to ZCL_EXCEL_WORKSHEET
       !IT_EXTERNAL_HYPERLINKS type GTT_EXTERNAL_HYPERLINKS
+    raising
+      ZCX_EXCEL .
+  methods LOAD_WORKSHEET_TABLES
+    importing
+      !IO_IXML_WORKSHEET type ref to IF_IXML_DOCUMENT
+      !IO_WORKSHEET      type ref to ZCL_EXCEL_WORKSHEET
+      !IV_DIRNAME        type STRING
+      !IT_TABLES         type T_TABLES
     raising
       ZCX_EXCEL .
   methods LOAD_WORKSHEET_PAGEBREAKS
@@ -2219,6 +2234,7 @@ METHOD load_worksheet.
              lc_xml_attr_true_int TYPE string VALUE '1',
              lc_rel_drawing       TYPE string VALUE 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing',
              lc_rel_hyperlink     TYPE string VALUE 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+             lc_rel_table         TYPE string VALUE 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/table',
              lc_rel_printer       TYPE string VALUE 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/printerSettings'.
 
   DATA: lo_ixml_worksheet           TYPE REF TO if_ixml_document,
@@ -2304,6 +2320,8 @@ METHOD load_worksheet.
 
         lt_external_hyperlinks      TYPE gtt_external_hyperlinks,
         ls_external_hyperlink       LIKE LINE OF lt_external_hyperlinks,
+        lt_tables                   TYPE t_tables,
+        ls_table                    LIKE LINE OF lt_tables,
 
         lo_ixml_datavalidations     TYPE REF TO if_ixml_node_collection,
         lo_ixml_datavalidation_elem TYPE REF TO if_ixml_element,
@@ -2371,6 +2389,10 @@ METHOD load_worksheet.
       WHEN lc_rel_hyperlink.
         MOVE-CORRESPONDING ls_relationship TO ls_external_hyperlink.
         INSERT ls_external_hyperlink INTO TABLE lt_external_hyperlinks.
+
+      WHEN lc_rel_table.
+        MOVE-CORRESPONDING ls_relationship TO ls_table.
+        INSERT ls_table INTO TABLE lt_tables.
 
       WHEN OTHERS.
     ENDCASE.
@@ -2853,6 +2875,15 @@ METHOD load_worksheet.
       me->load_worksheet_hyperlinks( io_ixml_worksheet      = lo_ixml_worksheet
                                      io_worksheet           = io_worksheet
                                      it_external_hyperlinks = lt_external_hyperlinks ).
+    CATCH zcx_excel. " Ignore Hyperlink reading errors - pass everything we were able to identify
+  ENDTRY.
+
+  " Read tables
+  TRY.
+      me->load_worksheet_tables( io_ixml_worksheet = lo_ixml_worksheet
+                                 io_worksheet      = io_worksheet
+                                 iv_dirname        = lv_dirname
+                                 it_tables         = lt_tables ).
     CATCH zcx_excel. " Ignore Hyperlink reading errors - pass everything we were able to identify
   ENDTRY.
 
@@ -3486,6 +3517,125 @@ METHOD load_worksheet_hyperlinks.
 
 ENDMETHOD.
 
+
+METHOD load_worksheet_tables.
+
+  DATA: lo_ixml_table_columns TYPE REF TO if_ixml_node_collection,
+        lo_ixml_table_column  TYPE REF TO if_ixml_element,
+        lo_ixml_table         TYPE REF TO if_ixml_element,
+        lo_ixml_table_style   TYPE REF TO if_ixml_element,
+        lt_field_catalog      TYPE zexcel_t_fieldcatalog,
+        ls_field_catalog      TYPE zexcel_s_fieldcatalog,
+        lo_ixml_iterator      TYPE REF TO if_ixml_node_iterator,
+        ls_table_settings     TYPE zexcel_s_table_settings,
+        lv_path               TYPE string,
+        lt_components         TYPE abap_component_tab,
+        ls_component          TYPE abap_componentdescr,
+        lo_rtti_table         TYPE REF TO cl_abap_tabledescr,
+        lv_dref_table         TYPE REF TO data,
+        lv_num_lines          TYPE i.
+
+  DATA: BEGIN OF ls_table,
+          id             TYPE string,
+          name           TYPE string,
+          displayname    TYPE string,
+          ref            TYPE string,
+          totalsrowshown TYPE string,
+        END OF ls_table.
+
+  DATA: BEGIN OF ls_table_style,
+          name              TYPE string,
+          showrowstripes    TYPE string,
+          showcolumnstripes TYPE string,
+        END OF ls_table_style.
+
+  DATA: BEGIN OF ls_table_column,
+          id   TYPE string,
+          name TYPE string,
+        END OF ls_table_column.
+
+  FIELD-SYMBOLS:
+    <ls_table> LIKE LINE OF it_tables,
+    <lt_table> TYPE STANDARD TABLE.
+
+  LOOP AT it_tables ASSIGNING <ls_table>.
+
+    CONCATENATE iv_dirname <ls_table>-target INTO lv_path.
+    lv_path = resolve_path( lv_path ).
+
+    lo_ixml_table = me->get_ixml_from_zip_archive( lv_path )->get_root_element( ).
+    fill_struct_from_attributes( EXPORTING
+                                   ip_element = lo_ixml_table
+                                 CHANGING
+                                   cp_structure = ls_table ).
+
+    lo_ixml_table_style ?= lo_ixml_table->find_from_name( 'tableStyleInfo' ).
+    fill_struct_from_attributes( EXPORTING
+                                   ip_element = lo_ixml_table_style
+                                 CHANGING
+                                   cp_structure = ls_table_style ).
+
+    ls_table_settings-table_name = ls_table-name.
+    ls_table_settings-show_column_stripes = ls_table_style-showcolumnstripes.
+    ls_table_settings-show_row_stripes = ls_table_style-showrowstripes.
+
+    zcl_excel_common=>convert_range2column_a_row(
+      EXPORTING
+        i_range        = ls_table-ref
+      IMPORTING
+        e_column_start = ls_table_settings-top_left_column
+        e_column_end   = ls_table_settings-bottom_right_column
+        e_row_start    = ls_table_settings-top_left_row
+        e_row_end      = ls_table_settings-bottom_right_row ).
+
+    lo_ixml_table_columns =  lo_ixml_table->get_elements_by_tag_name( name = 'tableColumn' ).
+    lo_ixml_iterator     =  lo_ixml_table_columns->create_iterator( ).
+    lo_ixml_table_column  ?= lo_ixml_iterator->get_next( ).
+    clear lt_field_catalog.
+    WHILE lo_ixml_table_column IS BOUND.
+
+      CLEAR ls_table_column.
+      fill_struct_from_attributes( EXPORTING
+                                     ip_element = lo_ixml_table_column
+                                   CHANGING
+                                     cp_structure = ls_table_column ).
+
+      ls_field_catalog-position = lines( lt_field_catalog ) + 1.
+      ls_field_catalog-fieldname = |COMP_{ ls_field_catalog-position PAD = '0' ALIGN = RIGHT WIDTH = 4 }|.
+      ls_field_catalog-scrtext_l = ls_table_column-name.
+      ls_field_catalog-dynpfld = abap_true.
+      ls_field_catalog-abap_type = cl_abap_typedescr=>typekind_string.
+      APPEND ls_field_catalog TO lt_field_catalog.
+
+      lo_ixml_table_column ?= lo_ixml_iterator->get_next( ).
+
+    ENDWHILE.
+
+    CLEAR lt_components.
+    LOOP AT lt_field_catalog ASSIGNING FIELD-SYMBOL(<field>).
+      CLEAR ls_component.
+      ls_component-name = <field>-fieldname.
+      ls_component-type = cl_abap_elemdescr=>get_string( ).
+      APPEND ls_component TO lt_components.
+    ENDLOOP.
+    lo_rtti_table = cl_abap_tabledescr=>get( p_line_type = cl_abap_structdescr=>get( lt_components ) ).
+    CREATE DATA lv_dref_table TYPE HANDLE lo_rtti_table.
+    ASSIGN lv_dref_table->* TO <lt_table>.
+
+    lv_num_lines = ls_table_settings-bottom_right_row - ls_table_settings-top_left_row.
+    DO lv_num_lines TIMES.
+      APPEND INITIAL LINE TO <lt_table>.
+    ENDDO.
+
+    io_worksheet->bind_table(
+      EXPORTING
+        ip_table            = <lt_table>
+        it_field_catalog    = lt_field_catalog
+        is_table_settings   = ls_table_settings ).
+
+ENDLOOP.
+
+ENDMETHOD.
 
 METHOD load_worksheet_pagebreaks.
 
