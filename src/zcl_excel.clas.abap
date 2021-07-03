@@ -364,9 +364,14 @@ ENDMETHOD.
 
   METHOD fill_template.
 
-    DATA
-          : lo_template_filler TYPE REF TO zcl_excel_fill_template
-          .
+    DATA: lo_template_filler TYPE REF TO zcl_excel_fill_template,
+          lt_data            TYPE TABLE OF zexcel_s_cell_data,
+          lv_column_alpha    TYPE zexcel_cell_column_alpha.
+
+    FIELD-SYMBOLS:
+      <fs_sheet> TYPE zexcel_template_sheet_title,
+      <fs_data>  TYPE zexcel_s_template_data.
+
 
     CREATE OBJECT lo_template_filler .
 
@@ -376,17 +381,6 @@ ENDMETHOD.
     lo_template_filler->find_var( me ).
 
 
-
-    DATA
-          : lt_data TYPE TABLE OF zexcel_s_cell_data
-          , lv_column_alpha             TYPE zexcel_cell_column_alpha
-          .
-
-    FIELD-SYMBOLS
-                   : <fs_sheet> TYPE ZEXCEL_TEMPLATE_SHEET_TITLE
-                   , <fs_data> type ZEXCEL_S_TEMPLATE_DATA
-                   .
-
     LOOP AT lo_template_filler->mt_sheet ASSIGNING <fs_sheet>.
 
       READ TABLE iv_data->mt_data ASSIGNING <fs_data> WITH KEY sheet = <fs_sheet>.
@@ -394,7 +388,6 @@ ENDMETHOD.
       lo_template_filler->fill_sheet( <fs_data> ).
 
     ENDLOOP.
-
 
 
   ENDMETHOD.

@@ -52,7 +52,7 @@ CLASS zcl_excel_worksheet DEFINITION
     DATA show_rowcolheaders TYPE zexcel_show_gridlines READ-ONLY VALUE abap_true. "#EC NOTEXT
     DATA styles TYPE zexcel_t_sheet_style .
     DATA tabcolor TYPE zexcel_s_tabcolor READ-ONLY .
-    DATA mt_merged_cells TYPE mty_ts_merge .
+    DATA mt_merged_cells TYPE mty_ts_merge READ-ONLY .
 
     METHODS add_comment
       IMPORTING

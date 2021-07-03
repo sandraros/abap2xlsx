@@ -1,70 +1,66 @@
-class ZCL_EXCEL_FILL_TEMPLATE definition
-  public
-  final
-  create public .
+CLASS zcl_excel_fill_template DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
 
-public section.
+  PUBLIC SECTION.
 
-  data MT_SHEET type ZEXCEL_TEMPLATE_T_SHEET_TITLE .
-  data MT_RANGE type ZEXCEL_TEMPLATE_T_RANGE .
-  data MT_VAR type ZEXCEL_TEMPLATE_T_VAR .
-  data MO_EXCEL type ref to ZCL_EXCEL .
+    DATA mt_sheet TYPE zexcel_template_t_sheet_title .
+    DATA mt_range TYPE zexcel_template_t_range .
+    DATA mt_var TYPE zexcel_template_t_var .
+    DATA mo_excel TYPE REF TO zcl_excel .
 
-  methods GET_RANGE
-    importing
-      !IO_EXCEL type ref to ZCL_EXCEL .
-  methods VALIDATE_RANGE
-    importing
-      !IO_RANGE type ref to ZCL_EXCEL_RANGE .
-  methods DISCARD_OVERLAPPED .
-  methods SIGN_RANGE .
-  methods FIND_VAR
-    importing
-      !IO_EXCEL type ref to ZCL_EXCEL .
-  methods FILL_SHEET
-    importing
-      !IV_DATA type ZEXCEL_S_TEMPLATE_DATA .
-  methods FILL_RANGE
-    importing
-      !IV_SHEET type ZEXCEL_SHEET_TITLE
-      !IV_PARENT type ZEXCEL_CELL_ROW
-      !IV_DATA type DATA
-      value(IV_RANGE_LENGTH) type ZEXCEL_CELL_ROW
-      !IO_SHEET type ref to ZCL_EXCEL_WORKSHEET
-    changing
-      !CT_CELLS type ZEXCEL_TEMPLATE_T_CELL_DATA
-      !CH_DIFF type ZEXCEL_CELL_ROW
-      !CT_MERGED_CELLS type ZCL_EXCEL_WORKSHEET=>MTY_TS_MERGE .
-protected section.
-private section.
+    METHODS get_range
+      IMPORTING
+        !io_excel TYPE REF TO zcl_excel .
+    METHODS validate_range
+      IMPORTING
+        !io_range TYPE REF TO zcl_excel_range .
+    METHODS discard_overlapped .
+    METHODS sign_range .
+    METHODS find_var
+      IMPORTING
+        !io_excel TYPE REF TO zcl_excel .
+    METHODS fill_sheet
+      IMPORTING
+        !iv_data TYPE zexcel_s_template_data .
+    METHODS fill_range
+      IMPORTING
+        !iv_sheet              TYPE zexcel_sheet_title
+        !iv_parent             TYPE zexcel_cell_row
+        !iv_data               TYPE data
+        VALUE(iv_range_length) TYPE zexcel_cell_row
+        !io_sheet              TYPE REF TO zcl_excel_worksheet
+      CHANGING
+        !ct_cells              TYPE zexcel_template_t_cell_data
+        !cv_diff               TYPE zexcel_cell_row
+        !ct_merged_cells       TYPE zcl_excel_worksheet=>mty_ts_merge .
+  PROTECTED SECTION.
+  PRIVATE SECTION.
 ENDCLASS.
 
 
 
-CLASS ZCL_EXCEL_FILL_TEMPLATE IMPLEMENTATION.
+CLASS zcl_excel_fill_template IMPLEMENTATION.
 
 
   METHOD discard_overlapped.
-    DATA
-      : lt_range TYPE zexcel_template_t_range
-      .
-
-    FIELD-SYMBOLS
-                   : <fs_range> TYPE zexcel_template_s_range
-                   , <fs_tmp> TYPE zexcel_template_s_range
-                   .
+    DATA:
+       lt_range TYPE zexcel_template_t_range.
+    FIELD-SYMBOLS:
+      <fs_range> TYPE zexcel_template_s_range,
+      <fs_tmp>   TYPE zexcel_template_s_range.
 
     SORT mt_range BY sheet  start  stop.
 
     LOOP AT mt_range ASSIGNING <fs_range>.
 
-      LOOP AT mt_range ASSIGNING <fs_tmp> WHERE sheet = <fs_range>-sheet AND
-                                                              name NE <fs_range>-name AND
-                                                              stop >= <fs_range>-start  AND
-                                                              start < <fs_range>-start  AND
-                                                              stop < <fs_range>-stop   .
-        .
-
+      LOOP AT mt_range ASSIGNING <fs_tmp> WHERE sheet =  <fs_range>-sheet
+                                            AND name  <> <fs_range>-name
+                                            AND stop  >= <fs_range>-start
+                                            AND start <  <fs_range>-start
+                                            AND stop  <  <fs_range>-stop.
+        EXIT.
       ENDLOOP.
 
       IF sy-subrc NE 0.
@@ -82,43 +78,49 @@ CLASS ZCL_EXCEL_FILL_TEMPLATE IMPLEMENTATION.
 
   METHOD fill_range.
 
+    DATA: tmp_cells_template        TYPE zexcel_template_t_cell_data,
+          lt_cells_result           TYPE zexcel_template_t_cell_data,
+          tmp_cells                 TYPE zexcel_template_t_cell_data,
+          ls_cell                   TYPE zexcel_s_cell_data,
 
-    DATA
-          : tmp_cells_template TYPE zexcel_template_t_cell_data
-          , lt_cells_result    TYPE zexcel_template_t_cell_data
-          , tmp_cells          TYPE zexcel_template_t_cell_data
-          , ls_cell            TYPE zexcel_s_cell_data
+          tmp_merged_cells_template TYPE zcl_excel_worksheet=>mty_ts_merge,
+          lt_merged_cells_result    TYPE zcl_excel_worksheet=>mty_ts_merge,
+          lt_merged_cells_half      TYPE zcl_excel_worksheet=>mty_ts_merge,
+          tmp_merged_cells          TYPE zcl_excel_worksheet=>mty_ts_merge,
+          ls_merged_cell            LIKE LINE OF tmp_merged_cells,
 
-          , tmp_merged_cells_template TYPE zcl_excel_worksheet=>mty_ts_merge
-          , lt_merged_cells_result    TYPE zcl_excel_worksheet=>mty_ts_merge
-          , lt_merged_cells_half      TYPE zcl_excel_worksheet=>mty_ts_merge
-          , tmp_merged_cells          TYPE zcl_excel_worksheet=>mty_ts_merge
-          , ls_merged_cell            LIKE LINE OF tmp_merged_cells
+          lv_start                  TYPE i,
+          lv_stop                   TYPE i,
 
-          , lv_start TYPE i
-          , lv_stop TYPE i
+          col_str                   TYPE string,
+
+          result_tab                TYPE match_result_tab,
+          lv_search                 TYPE string,
+          lv_var_name               TYPE string,
+          lo_value_new              TYPE REF TO data,
+          lo_addit                  TYPE REF TO cl_abap_elemdescr,
+          lv_str                    TYPE string,
+          lv_value_type             TYPE c.
+
+    FIELD-SYMBOLS:
+      <fs_table>   TYPE ANY TABLE,
+      <fs_line>    TYPE any,
+      <fs_range>   TYPE zexcel_template_s_range,
+      <fs_cell>    TYPE zexcel_s_cell_data,
+      <fs_numeric> TYPE numeric,
+      <fs_result>  TYPE match_result,
+      <fs_var>     TYPE any.
 
 
-          , col_str TYPE string
-
-          .
-    FIELD-SYMBOLS
-                   : <fs_table> TYPE ANY TABLE
-                   , <fs_line> TYPE any
-                   , <fs_range> TYPE ZEXCEL_TEMPLATE_s_RANGE
-                   .
-
-
-
-    ch_diff = ch_diff +  iv_range_length .
+    cv_diff = cv_diff +  iv_range_length .
 
     lv_start = 1.
 
 
 * recursive fill nested range
 
-    LOOP AT mt_range ASSIGNING <fs_range> WHERE sheet = iv_sheet AND
-                                                              parent = iv_parent.
+    LOOP AT mt_range ASSIGNING <fs_range> WHERE sheet = iv_sheet
+                                            AND parent = iv_parent.
 
 
       lv_stop = <fs_range>-start - 1.
@@ -126,7 +128,7 @@ CLASS ZCL_EXCEL_FILL_TEMPLATE IMPLEMENTATION.
 *      update cells before any range
 
       LOOP AT ct_cells INTO ls_cell  WHERE cell_row >= lv_start AND cell_row <= lv_stop .
-        ls_cell-cell_row =  ls_cell-cell_row + ch_diff.
+        ls_cell-cell_row =  ls_cell-cell_row + cv_diff.
         col_str = zcl_excel_common=>convert_column2alpha( ls_cell-cell_column ).
 
         ls_cell-cell_coords = ls_cell-cell_row.
@@ -141,8 +143,8 @@ CLASS ZCL_EXCEL_FILL_TEMPLATE IMPLEMENTATION.
 *      update merged cells before range
 
       LOOP AT ct_merged_cells INTO ls_merged_cell WHERE row_from >=  lv_start AND row_to <= lv_stop.
-        ls_merged_cell-row_from = ls_merged_cell-row_from + ch_diff.
-        ls_merged_cell-row_to = ls_merged_cell-row_to + ch_diff.
+        ls_merged_cell-row_from = ls_merged_cell-row_from + cv_diff.
+        ls_merged_cell-row_to = ls_merged_cell-row_to + cv_diff.
 
         APPEND ls_merged_cell TO lt_merged_cells_result.
 
@@ -154,10 +156,10 @@ CLASS ZCL_EXCEL_FILL_TEMPLATE IMPLEMENTATION.
 
 
 
-      CLEAR
-      : tmp_cells_template
-      , tmp_merged_cells_template
-      .
+      CLEAR:
+       tmp_cells_template,
+       tmp_merged_cells_template.
+
 
 *copy cell template
       LOOP AT ct_cells INTO ls_cell WHERE cell_row >= <fs_range>-start AND cell_row <= <fs_range>-stop.
@@ -172,7 +174,7 @@ CLASS ZCL_EXCEL_FILL_TEMPLATE IMPLEMENTATION.
       ASSIGN COMPONENT <fs_range>-name OF STRUCTURE iv_data TO <fs_table>.
       CHECK sy-subrc = 0.
 
-      ch_diff = ch_diff - <fs_range>-length.
+      cv_diff = cv_diff - <fs_range>-length.
 
 *merge each line of data table with template
       LOOP AT <fs_table> ASSIGNING <fs_line>.
@@ -184,15 +186,15 @@ CLASS ZCL_EXCEL_FILL_TEMPLATE IMPLEMENTATION.
 
         fill_range(
           EXPORTING
-            io_sheet = io_sheet
-            iv_sheet  = iv_sheet
-            iv_parent = <fs_range>-id
-            iv_data   = <fs_line>
+            io_sheet        = io_sheet
+            iv_sheet        = iv_sheet
+            iv_parent       = <fs_range>-id
+            iv_data         = <fs_line>
             iv_range_length = <fs_range>-length
           CHANGING
-            ct_cells  = tmp_cells
-            ct_merged_cells  = tmp_merged_cells
-            ch_diff = ch_diff ).
+            ct_cells        = tmp_cells
+            ct_merged_cells = tmp_merged_cells
+            cv_diff         = cv_diff ).
 
 *collect data
 
@@ -207,7 +209,7 @@ CLASS ZCL_EXCEL_FILL_TEMPLATE IMPLEMENTATION.
     IF <fs_range> IS ASSIGNED.
 
       LOOP AT ct_cells INTO ls_cell WHERE cell_row > <fs_range>-stop .
-        ls_cell-cell_row =  ls_cell-cell_row + ch_diff.
+        ls_cell-cell_row =  ls_cell-cell_row + cv_diff.
         col_str = zcl_excel_common=>convert_column2alpha( ls_cell-cell_column ).
 
         ls_cell-cell_coords = ls_cell-cell_row.
@@ -220,8 +222,8 @@ CLASS ZCL_EXCEL_FILL_TEMPLATE IMPLEMENTATION.
       ct_cells = lt_cells_result.
 
       LOOP AT ct_merged_cells INTO ls_merged_cell WHERE row_from > <fs_range>-stop.
-        ls_merged_cell-row_from = ls_merged_cell-row_from + ch_diff.
-        ls_merged_cell-row_to = ls_merged_cell-row_to + ch_diff.
+        ls_merged_cell-row_from = ls_merged_cell-row_from + cv_diff.
+        ls_merged_cell-row_to = ls_merged_cell-row_to + cv_diff.
 
         APPEND ls_merged_cell TO lt_merged_cells_result.
       ENDLOOP.
@@ -230,12 +232,9 @@ CLASS ZCL_EXCEL_FILL_TEMPLATE IMPLEMENTATION.
 
     ELSE.
 
-      FIELD-SYMBOLS
-                     : <fs_cell> TYPE ZEXCEL_S_CELL_DATA
-                     .
 
       LOOP AT ct_cells ASSIGNING <fs_cell>.
-        <fs_cell>-cell_row =  <fs_cell>-cell_row + ch_diff.
+        <fs_cell>-cell_row =  <fs_cell>-cell_row + cv_diff.
         col_str = zcl_excel_common=>convert_column2alpha( <fs_cell>-cell_column ).
 
         <fs_cell>-cell_coords = <fs_cell>-cell_row.
@@ -244,8 +243,8 @@ CLASS ZCL_EXCEL_FILL_TEMPLATE IMPLEMENTATION.
       ENDLOOP.
 
       LOOP AT ct_merged_cells INTO ls_merged_cell .
-        ls_merged_cell-row_from = ls_merged_cell-row_from + ch_diff.
-        ls_merged_cell-row_to = ls_merged_cell-row_to + ch_diff.
+        ls_merged_cell-row_from = ls_merged_cell-row_from + cv_diff.
+        ls_merged_cell-row_to = ls_merged_cell-row_to + cv_diff.
 
         APPEND ls_merged_cell TO lt_merged_cells_result.
       ENDLOOP.
@@ -264,19 +263,6 @@ CLASS ZCL_EXCEL_FILL_TEMPLATE IMPLEMENTATION.
 *      replace variables of current range with data
       LOOP AT ct_cells ASSIGNING <fs_cell>.
 
-        DATA
-              : result_tab TYPE match_result_tab
-              , lv_search TYPE string
-              , lv_var_name TYPE string
-              , lo_value_new     TYPE REF TO data
-              , lo_addit    TYPE REF TO cl_abap_elemdescr
-              .
-
-        FIELD-SYMBOLS
-                       : <fs_numeric>       TYPE numeric
-                       , <fs_result> TYPE MATCH_RESULT
-                       , <fs_var> TYPE any
-                       .
 
         REFRESH result_tab.
 
@@ -295,15 +281,9 @@ CLASS ZCL_EXCEL_FILL_TEMPLATE IMPLEMENTATION.
           ASSIGN COMPONENT lv_var_name OF STRUCTURE iv_data TO <fs_var>.
           CHECK sy-subrc = 0.
 
-          DATA
-                : lv_str TYPE string
-                .
-
           lv_str = <fs_var>.
 
-
           REPLACE ALL OCCURRENCES OF lv_search IN <fs_cell>-cell_value  WITH lv_str.
-
 
         ENDLOOP.
 
@@ -311,9 +291,6 @@ CLASS ZCL_EXCEL_FILL_TEMPLATE IMPLEMENTATION.
 
         CHECK  <fs_cell>-cell_value CO '1234567890. '.
 
-        data
-              : lv_value_type  TYPE c
-              .
 
         DESCRIBE FIELD <fs_var> TYPE lv_value_type.
 
@@ -357,59 +334,69 @@ CLASS ZCL_EXCEL_FILL_TEMPLATE IMPLEMENTATION.
 
   METHOD fill_sheet.
 
-    DATA
-          : lo_worksheet    TYPE REF TO zcl_excel_worksheet
-          .
+    DATA: lo_worksheet     TYPE REF TO zcl_excel_worksheet,
+          lt_sheet_content TYPE  zexcel_template_t_cell_data,
+          lt_merged_cells  TYPE zcl_excel_worksheet=>mty_ts_merge,
+          lv_dif           TYPE i.
 
-    FIELD-SYMBOLS
-                   : <any_data> TYPE any
-                   .
+    FIELD-SYMBOLS:
+      <any_data>         TYPE any,
+      <fs_sheet_content> TYPE zexcel_s_cell_data,
+      <fs_merged_cell>   TYPE zcl_excel_worksheet=>mty_merge.
+
 
     lo_worksheet = mo_excel->get_worksheet_by_name( iv_data-sheet ).
-
-    DATA
-          : lt_sheet_content TYPE  zexcel_template_t_cell_data
-          , lt_merged_cells TYPE zcl_excel_worksheet=>mty_ts_merge
-          .
 
     lt_sheet_content = lo_worksheet->sheet_content.
     lt_merged_cells = lo_worksheet->mt_merged_cells.
 
     ASSIGN iv_data-data->* TO <any_data>.
 
-    DATA
-          : lv_dif TYPE i
-          .
-
     fill_range(
       EXPORTING
-        io_sheet = lo_worksheet
+        io_sheet        = lo_worksheet
         iv_range_length = 0
-        iv_sheet  = iv_data-sheet
-        iv_parent = 0
-        iv_data   = <any_data>
+        iv_sheet        = iv_data-sheet
+        iv_parent       = 0
+        iv_data         = <any_data>
       CHANGING
-        ct_cells  = lt_sheet_content
+        ct_cells        = lt_sheet_content
         ct_merged_cells = lt_merged_cells
-        ch_diff   = lv_dif  ).
+        cv_diff         = lv_dif  ).
 
 
     REFRESH  lo_worksheet->sheet_content.
-
-
-    FIELD-SYMBOLS
-                   : <fs_sheet_content> TYPE ZEXCEL_S_CELL_DATA
-                   , <fs_merged_cell> TYPE zcl_excel_worksheet=>mty_merge
-                   .
 
     LOOP AT lt_sheet_content ASSIGNING <fs_sheet_content>.
       INSERT <fs_sheet_content> INTO TABLE lo_worksheet->sheet_content.
     ENDLOOP.
 
-    REFRESH  lo_worksheet->mt_merged_cells.
+data(merged_cells) = lo_worksheet->get_merge( ).
+LOOP AT merged_cells ASSIGNING FIELD-SYMBOL(<merged_cell>).
+ZCL_excel_common=>convert_range2column_a_row(
+  EXPORTING
+    i_range        = <merged_cell>
+  IMPORTING
+    e_column_start = data(column_start)
+*    e_column_end   =
+    e_row_start    = data(row_start)
+*    e_row_end      =
+*    e_sheet        =
+).
+*  CATCH zcx_excel.    "
+lo_worksheet->delete_merge( ip_cell_column = column_start ip_cell_row = row_start ).
+ENDLOOP.
+*    REFRESH  lo_worksheet->mt_merged_cells.
 
     LOOP AT lt_merged_cells ASSIGNING <fs_merged_cell>.
-      INSERT <fs_merged_cell> INTO TABLE lo_worksheet->mt_merged_cells.
+    lo_worksheet->set_merge(
+*      EXPORTING
+        ip_column_start = <fs_merged_cell>-col_from
+        ip_column_end   = <fs_merged_cell>-col_to
+        ip_row          = <fs_merged_cell>-row_from
+        ip_row_to       = <fs_merged_cell>-row_to ).
+*      CATCH zcx_excel.    "
+*      INSERT <fs_merged_cell> INTO TABLE lo_worksheet->mt_merged_cells.
     ENDLOOP.
 
 
@@ -419,22 +406,26 @@ CLASS ZCL_EXCEL_FILL_TEMPLATE IMPLEMENTATION.
 
   METHOD find_var.
 
-    DATA
-          : row TYPE i
-          , column TYPE i
-          , col_str TYPE string
-          , value TYPE string
+    DATA: row            TYPE i,
+          column         TYPE i,
+          col_str        TYPE string,
+          value          TYPE string,
 
-          , lo_worksheet TYPE REF TO zcl_excel_worksheet
-          , ls_var TYPE zexcel_template_s_var
+          lo_worksheet   TYPE REF TO zcl_excel_worksheet,
+          ls_var         TYPE zexcel_template_s_var,
 
-          , highest_column TYPE ZEXCEL_CELL_COLUMN
-          , highest_row TYPE INT4
-          .
+          highest_column TYPE zexcel_cell_column,
+          highest_row    TYPE int4,
 
-          FIELD-SYMBOLS
-                         : <fs_sheet> type ZEXCEL_TEMPLATE_SHEET_TITLE
-                         .
+          result_tab     TYPE match_result_tab,
+          lv_search      TYPE string,
+          lv_replace     TYPE string.
+
+    FIELD-SYMBOLS:
+      <fs_result> TYPE match_result,
+      <fs_range>  TYPE zexcel_template_s_range,
+      <fs_sheet>  TYPE zexcel_template_sheet_title.
+
 
     LOOP AT mt_sheet ASSIGNING <fs_sheet>.
 
@@ -457,17 +448,6 @@ CLASS ZCL_EXCEL_FILL_TEMPLATE IMPLEMENTATION.
           ).
 
 
-          DATA
-                : result_tab TYPE match_result_tab
-                , lv_search TYPE string
-                , lv_replace TYPE string
-                .
-
-          FIELD-SYMBOLS
-                         : <fs_result> type MATCH_RESULT
-                         , <fs_range> TYPE ZEXCEL_TEMPLATE_S_RANGE
-                         .
-
           FIND ALL OCCURRENCES OF REGEX '\[[^\]]*\]' IN value RESULTS result_tab.
 
           LOOP AT result_tab ASSIGNING <fs_result>.
@@ -484,8 +464,8 @@ CLASS ZCL_EXCEL_FILL_TEMPLATE IMPLEMENTATION.
             CONDENSE ls_var-name .
 
             LOOP AT mt_range ASSIGNING <fs_range> WHERE sheet = <fs_sheet>
-                                                                    AND start <= row
-                                                                    AND stop >= row.
+                                                    AND start <= row
+                                                    AND stop >= row.
               ls_var-parent = <fs_range>-id.
               EXIT.
             ENDLOOP.
@@ -509,12 +489,12 @@ CLASS ZCL_EXCEL_FILL_TEMPLATE IMPLEMENTATION.
 
 
   METHOD get_range.
-    DATA
-          : lo_worksheets_iterator TYPE REF TO cl_object_collection_iterator
-          , lo_worksheet TYPE REF TO zcl_excel_worksheet
-          , lo_range_iterator TYPE REF TO cl_object_collection_iterator
-          , lo_range TYPE REF TO zcl_excel_range
-          .
+
+    DATA:
+      lo_worksheets_iterator TYPE REF TO cl_object_collection_iterator,
+      lo_worksheet           TYPE REF TO zcl_excel_worksheet,
+      lo_range_iterator      TYPE REF TO cl_object_collection_iterator,
+      lo_range               TYPE REF TO zcl_excel_range.
 
     mo_excel = io_excel.
 
@@ -538,19 +518,18 @@ CLASS ZCL_EXCEL_FILL_TEMPLATE IMPLEMENTATION.
 
   METHOD sign_range.
 
-    FIELD-SYMBOLS
-                   : <fs_range> type ZEXCEL_TEMPLATE_S_RANGE
-                   , <fs_range_tmp> type ZEXCEL_TEMPLATE_S_RANGE
-                   .
+    DATA: lv_tabix TYPE i.
+    FIELD-SYMBOLS:
+      <fs_range>     TYPE zexcel_template_s_range,
+      <fs_range_tmp> TYPE zexcel_template_s_range.
+
     LOOP AT mt_range ASSIGNING <fs_range>.
       <fs_range>-id = sy-tabix.
     ENDLOOP.
 
     LOOP AT mt_range ASSIGNING  <fs_range>.
-      DATA
-            : lv_tabix TYPE i
-            .
       lv_tabix = sy-tabix + 1.
+
       LOOP AT mt_range ASSIGNING  <fs_range_tmp>
                                   FROM lv_tabix
                                   WHERE sheet = <fs_range>-sheet.
@@ -569,17 +548,18 @@ CLASS ZCL_EXCEL_FILL_TEMPLATE IMPLEMENTATION.
 
   METHOD validate_range.
 
-    DATA
-          : name TYPE string
-          , value TYPE string
-          , start TYPE string
-          , stop  TYPE string
-          , lv_sheet TYPE string
-          , lv_value TYPE string
-          , lt_str TYPE TABLE OF string
-          , lv_start TYPE string
-          , lv_stop  TYPE string
-          .
+    DATA: name     TYPE string,
+          value    TYPE string,
+          start    TYPE string,
+          stop     TYPE string,
+          lv_sheet TYPE string,
+          lv_value TYPE string,
+          lt_str   TYPE TABLE OF string,
+          lv_start TYPE string,
+          lv_stop  TYPE string.
+
+    FIELD-SYMBOLS: <fs_range> TYPE zexcel_template_s_range.
+
 
     name = io_range->name.
     TRANSLATE name TO UPPER CASE.
@@ -592,14 +572,30 @@ CLASS ZCL_EXCEL_FILL_TEMPLATE IMPLEMENTATION.
     SPLIT start AT '$' INTO TABLE lt_str.
 
     IF lines( lt_str ) > 2.
+try.
+ZCL_EXCEL_COMMON=>convert_range2column_a_row(
+  EXPORTING
+    i_range        = VALUE
+  IMPORTING
+    e_column_start = data(column_start)
+    e_column_end   = data(column_end)
+    e_row_start    = data(row_start)
+    e_row_end      = DATA(row_end)
+).
+  CATCH zcx_excel.    "
       RETURN.
+  endtry.
+if column_start = 'A' and column_end = 'XFD'.
+lv_start = |{ row_start }|.
+lv_stop = |{ row_end }|.
+CLEAR lt_str.
+CLEAR stop.
+else.
+      RETURN.
+    ENDIF.
     ENDIF.
 
     READ TABLE lt_str INTO lv_start INDEX 2.
-
-    FIELD-SYMBOLS
-                   : <fs_range> type ZEXCEL_TEMPLATE_S_RANGE
-                   .
 
     IF lv_start CO '0123456789'.
       APPEND INITIAL LINE TO mt_range ASSIGNING <fs_range>.

@@ -81,8 +81,8 @@ INCLUDE zdemo_excel_outputopt_incl.
 PARAMETERS: p_fpath TYPE string OBLIGATORY LOWER CASE DEFAULT 'C:\Users\sadfasdf\Desktop\abap2xlsx\ZABAP2XLSX_EXAMPLE.xlsx'.
 
 
-PARAMETERS: p_file RADIOBUTTON GROUP rad1 DEFAULT 'X'
-          , p_smw0 RADIOBUTTON GROUP rad1
+PARAMETERS: p_file RADIOBUTTON GROUP rad1
+          , p_smw0 RADIOBUTTON GROUP rad1 DEFAULT 'X'
           .
 
 AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_fpath.
