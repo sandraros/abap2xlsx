@@ -31,6 +31,15 @@ CLASS zcl_excel_worksheet DEFINITION
       END OF mty_s_outline_row .
     TYPES:
       mty_ts_outlines_row TYPE SORTED TABLE OF mty_s_outline_row WITH UNIQUE KEY row_from row_to .
+    TYPES:
+      BEGIN OF mty_merge,
+        row_from TYPE i,
+        row_to   TYPE i,
+        col_from TYPE i,
+        col_to   TYPE i,
+      END OF mty_merge .
+    TYPES:
+      mty_ts_merge TYPE SORTED TABLE OF mty_merge WITH UNIQUE KEY table_line .
 
     CONSTANTS c_break_column TYPE zexcel_break VALUE 2.     "#EC NOTEXT
     CONSTANTS c_break_none TYPE zexcel_break VALUE 0.       "#EC NOTEXT
@@ -43,6 +52,7 @@ CLASS zcl_excel_worksheet DEFINITION
     DATA show_rowcolheaders TYPE zexcel_show_gridlines READ-ONLY VALUE abap_true. "#EC NOTEXT
     DATA styles TYPE zexcel_t_sheet_style .
     DATA tabcolor TYPE zexcel_s_tabcolor READ-ONLY .
+    DATA mt_merged_cells TYPE mty_ts_merge .
 
     METHODS add_comment
       IMPORTING
@@ -579,17 +589,6 @@ CLASS zcl_excel_worksheet DEFINITION
       mty_th_font_cache
              TYPE HASHED TABLE OF mty_s_font_cache
              WITH UNIQUE KEY font_name font_height flag_bold flag_italic .
-    TYPES:
-*  types:
-*    mty_ts_row_dimension TYPE SORTED TABLE OF zexcel_s_worksheet_rowdimensio WITH UNIQUE KEY row .
-      BEGIN OF mty_merge,
-        row_from TYPE i,
-        row_to   TYPE i,
-        col_from TYPE i,
-        col_to   TYPE i,
-      END OF mty_merge .
-    TYPES:
-      mty_ts_merge TYPE SORTED TABLE OF mty_merge WITH UNIQUE KEY table_line .
 
 *"* private components of class ZCL_EXCEL_WORKSHEET
 *"* do not include other source files here!!!
@@ -611,7 +610,6 @@ CLASS zcl_excel_worksheet DEFINITION
     DATA lower_cell TYPE zexcel_s_cell_data .
     DATA mo_pagebreaks TYPE REF TO zcl_excel_worksheet_pagebreaks .
     CLASS-DATA mth_font_cache TYPE mty_th_font_cache .
-    DATA mt_merged_cells TYPE mty_ts_merge .
     DATA mt_row_outlines TYPE mty_ts_outlines_row .
     DATA print_title_col_from TYPE zexcel_cell_column_alpha .
     DATA print_title_col_to TYPE zexcel_cell_column_alpha .
