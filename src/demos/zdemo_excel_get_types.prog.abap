@@ -8,19 +8,17 @@
 
 REPORT zdemo_excel_get_types.
 
-TYPES : tt_text TYPE TABLE OF text80 .
+TYPES : tt_text TYPE TABLE OF text80.
 
-DATA  : lo_excel     TYPE REF TO zcl_excel
-      , reader          TYPE REF TO zif_excel_reader
-      , lo_template_filler TYPE REF TO zcl_excel_fill_template
-      .
+DATA: excel           TYPE REF TO zcl_excel,
+      reader          TYPE REF TO zif_excel_reader,
+      template_filler TYPE REF TO zcl_excel_fill_template.
 
 
-PARAMETERS: p_fpath TYPE string OBLIGATORY LOWER CASE DEFAULT 'C:\Users\sadfasdf\Desktop\abap2xlsx\ZABAP2XLSX_EXAMPLE.xlsx'.
+PARAMETERS: p_fpath TYPE string OBLIGATORY LOWER CASE DEFAULT 'c:\temp\whatever.xlsx'.
 
-PARAMETERS: p_normal RADIOBUTTON GROUP rad1 DEFAULT 'X'
-          , p_other RADIOBUTTON GROUP rad1
-          .
+PARAMETERS: p_normal RADIOBUTTON GROUP rad1 DEFAULT 'X',
+            p_other  RADIOBUTTON GROUP rad1.
 
 AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_fpath.
   PERFORM get_file_path CHANGING p_fpath.
@@ -29,14 +27,9 @@ AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_fpath.
 START-OF-SELECTION.
 
   CREATE OBJECT reader TYPE zcl_excel_reader_2007.
-  lo_excel = reader->load_file( p_fpath ).
+  excel = reader->load_file( p_fpath ).
 
-  CREATE OBJECT lo_template_filler .
-
-  lo_template_filler->get_range( lo_excel ).
-  lo_template_filler->discard_overlapped( ).
-  lo_template_filler->sign_range( ).
-  lo_template_filler->find_var( lo_excel ).
+  template_filler = zcl_excel_fill_template=>create( excel ).
 
   PERFORM get_types.
 
@@ -64,8 +57,7 @@ FORM get_file_path CHANGING cv_path TYPE string.
     rc                  = lv_rc
     user_action         = lv_user_action
   EXCEPTIONS
-    OTHERS              = 1
-    ).
+    OTHERS              = 1 ).
   IF sy-subrc = 0.
     IF lv_user_action = cl_gui_frontend_services=>action_ok.
       IF lt_file_table IS NOT INITIAL.
@@ -80,24 +72,24 @@ ENDFORM.                    " Get_file_path
 
 FORM get_types .
 
-  DATA
-        : lv_sum TYPE i
-        , lt_res TYPE tt_text
-        , lt_buf TYPE tt_text
-        .
+  DATA: lv_sum TYPE i,
+        lt_res TYPE tt_text,
+        lt_buf TYPE tt_text.
+  DATA: lv_lines TYPE i.
 
-  FIELD-SYMBOLS
-                 : <fs_sheet> LIKE LINE OF lo_template_filler->mt_sheet
-                 .
-  LOOP AT lo_template_filler->mt_sheet ASSIGNING <fs_sheet>.
+  FIELD-SYMBOLS: <fs_sheet> LIKE LINE OF template_filler->mt_sheet,
+                 <fs_res>   TYPE text80.
+
+
+  LOOP AT template_filler->mt_sheet ASSIGNING <fs_sheet>.
 
     CLEAR lv_sum.
 
-    READ TABLE lo_template_filler->mt_range TRANSPORTING NO FIELDS WITH KEY sheet = <fs_sheet>.
+    READ TABLE template_filler->mt_range TRANSPORTING NO FIELDS WITH KEY sheet = <fs_sheet>.
 
     ADD sy-subrc TO lv_sum.
 
-    READ TABLE lo_template_filler->mt_var TRANSPORTING NO FIELDS WITH KEY sheet = <fs_sheet>.
+    READ TABLE template_filler->mt_var TRANSPORTING NO FIELDS WITH KEY sheet = <fs_sheet>.
 
     ADD sy-subrc TO lv_sum.
 
@@ -107,16 +99,8 @@ FORM get_types .
 
     APPEND LINES OF lt_buf TO lt_res.
 
-
   ENDLOOP.
 
-  DATA
-        : lv_lines TYPE i
-        .
-
-  FIELD-SYMBOLS
-                 : <fs_res> TYPE text80
-                 .
 
   IF p_normal IS INITIAL.
     READ TABLE lt_res ASSIGNING <fs_res> INDEX 1.
@@ -163,24 +147,19 @@ FORM get_type_r USING p_sheet TYPE zexcel_template_sheet_title
                       p_parent  TYPE i
                 CHANGING ct_result TYPE tt_text.
 
+  DATA: lt_buf  TYPE tt_text,
+        lt_tmp  TYPE tt_text,
+        lv_sum  TYPE i,
+        lv_name TYPE string.
+
+  FIELD-SYMBOLS: <fs_buf>   TYPE text80,
+                 <fs_range> LIKE LINE OF template_filler->mt_range,
+                 <fs_var>   TYPE zexcel_template_s_var.
+
+
   CLEAR ct_result.
 
-  DATA
-        : lt_buf TYPE tt_text
-        , lt_tmp TYPE tt_text
-        , lv_sum TYPE i
-        .
-
-  FIELD-SYMBOLS
-                 : <fs_buf> TYPE text80
-                 .
-
-  FIELD-SYMBOLS
-                 : <fs_range> LIKE LINE OF lo_template_filler->mt_range
-                 .
-
-
-  LOOP AT lo_template_filler->mt_range ASSIGNING <fs_range> WHERE sheet = p_sheet
+  LOOP AT template_filler->mt_range ASSIGNING <fs_range> WHERE sheet = p_sheet
                                                         AND parent = p_parent.
 
     PERFORM get_type_r
@@ -197,14 +176,10 @@ FORM get_type_r USING p_sheet TYPE zexcel_template_sheet_title
 
   ADD sy-subrc TO lv_sum.
 
-  DATA
-        : lv_name TYPE string
-        .
-
   IF p_parent = 0.
     lv_name = p_sheet.
   ELSE.
-    READ TABLE lo_template_filler->mt_range ASSIGNING <fs_range> WITH KEY sheet = p_sheet
+    READ TABLE template_filler->mt_range ASSIGNING <fs_range> WITH KEY sheet = p_sheet
                                                       id = p_parent.
     lv_name = <fs_range>-name.
   ENDIF.
@@ -216,11 +191,8 @@ FORM get_type_r USING p_sheet TYPE zexcel_template_sheet_title
     CONCATENATE ' begin of t_' lv_name ',' INTO <fs_buf>.
   ENDIF.
 
-  FIELD-SYMBOLS
-                 : <fs_var> type ZEXCEL_TEMPLATE_S_VAR
-                 .
 
-  LOOP AT lo_template_filler->mt_var ASSIGNING <fs_var> WHERE sheet = p_sheet
+  LOOP AT template_filler->mt_var ASSIGNING <fs_var> WHERE sheet = p_sheet
                                                     AND parent = p_parent.
 
     APPEND INITIAL LINE TO lt_buf ASSIGNING <fs_buf>.
@@ -235,7 +207,7 @@ FORM get_type_r USING p_sheet TYPE zexcel_template_sheet_title
 
   ADD sy-subrc TO lv_sum.
 
-  LOOP AT lo_template_filler->mt_range ASSIGNING <fs_range> WHERE sheet = p_sheet
+  LOOP AT template_filler->mt_range ASSIGNING <fs_range> WHERE sheet = p_sheet
                                                         AND parent = p_parent.
 
     APPEND INITIAL LINE TO lt_buf ASSIGNING <fs_buf>.

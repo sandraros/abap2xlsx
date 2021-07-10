@@ -21,10 +21,8 @@ CLASS zcl_excel_template_data IMPLEMENTATION.
 
 
   METHOD add.
-    FIELD-SYMBOLS
-                   : <fs_data> TYPE zexcel_s_template_data
-                   , <fs_any> TYPE any
-                   .
+    FIELD-SYMBOLS: <fs_data> TYPE zexcel_s_template_data,
+                   <fs_any> TYPE any.
 
     APPEND INITIAL LINE TO mt_data ASSIGNING <fs_data>.
     <fs_data>-sheet = iv_sheet.

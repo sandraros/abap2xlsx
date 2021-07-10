@@ -5,25 +5,24 @@ CLASS zcl_excel_fill_template DEFINITION
 
   PUBLIC SECTION.
 
-    DATA mt_sheet TYPE zexcel_template_t_sheet_title .
-    DATA mt_range TYPE zexcel_template_t_range .
-    DATA mt_var TYPE zexcel_template_t_var .
-    DATA mo_excel TYPE REF TO zcl_excel .
+    DATA mt_sheet TYPE zexcel_template_t_sheet_title READ-ONLY.
+    DATA mt_range TYPE zexcel_template_t_range READ-ONLY.
+    DATA mt_var TYPE zexcel_template_t_var READ-ONLY.
+    DATA mo_excel TYPE REF TO zcl_excel READ-ONLY.
 
-    METHODS get_range
+    CLASS-METHODS create
       IMPORTING
-        !io_excel TYPE REF TO zcl_excel .
-    METHODS validate_range
-      IMPORTING
-        !io_range TYPE REF TO zcl_excel_range .
-    METHODS discard_overlapped .
-    METHODS sign_range .
-    METHODS find_var
-      IMPORTING
-        !io_excel TYPE REF TO zcl_excel .
+        !io_excel                 TYPE REF TO zcl_excel
+      RETURNING
+        VALUE(eo_template_filler) TYPE REF TO zcl_excel_fill_template.
+
     METHODS fill_sheet
       IMPORTING
         !iv_data TYPE zexcel_s_template_data .
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+
     METHODS fill_range
       IMPORTING
         !iv_sheet              TYPE zexcel_sheet_title
@@ -35,14 +34,32 @@ CLASS zcl_excel_fill_template DEFINITION
         !ct_cells              TYPE zexcel_template_t_cell_data
         !cv_diff               TYPE zexcel_cell_row
         !ct_merged_cells       TYPE zcl_excel_worksheet=>mty_ts_merge .
-  PROTECTED SECTION.
-  PRIVATE SECTION.
+    METHODS get_range .
+    METHODS validate_range
+      IMPORTING
+        !io_range TYPE REF TO zcl_excel_range .
+    METHODS discard_overlapped .
+    METHODS sign_range .
+    METHODS find_var .
+
 ENDCLASS.
 
 
 
 CLASS zcl_excel_fill_template IMPLEMENTATION.
 
+
+  METHOD create.
+
+    CREATE OBJECT eo_template_filler .
+
+    eo_template_filler->mo_excel = io_excel.
+    eo_template_filler->get_range( ).
+    eo_template_filler->discard_overlapped( ).
+    eo_template_filler->sign_range( ).
+    eo_template_filler->find_var( ).
+
+  ENDMETHOD.
 
   METHOD discard_overlapped.
     DATA:
@@ -109,7 +126,8 @@ CLASS zcl_excel_fill_template IMPLEMENTATION.
       <fs_cell>    TYPE zexcel_s_cell_data,
       <fs_numeric> TYPE numeric,
       <fs_result>  TYPE match_result,
-      <fs_var>     TYPE any.
+      <fs_var>     TYPE any,
+                   <fs_typekind_int8> TYPE abap_typekind.
 
 
     cv_diff = cv_diff +  iv_range_length .
@@ -255,11 +273,16 @@ CLASS zcl_excel_fill_template IMPLEMENTATION.
 
 
 *check if variables in this range
-    LOOP AT mt_var TRANSPORTING NO FIELDS WHERE sheet = iv_sheet AND parent = iv_parent.
-      EXIT.
-    ENDLOOP.
+    READ TABLE mt_var TRANSPORTING NO FIELDS WITH KEY sheet = iv_sheet parent = iv_parent.
 
     IF sy-subrc = 0.
+
+        ASSIGN ('CL_ABAP_TYPEDESCR=>TYPEKIND_INT8') TO <fs_typekind_int8>.
+        IF sy-subrc <> 0.
+          ASSIGN space TO <fs_typekind_int8>. "not used as typekind!
+        ENDIF.
+
+
 *      replace variables of current range with data
       LOOP AT ct_cells ASSIGNING <fs_cell>.
 
@@ -294,17 +317,17 @@ CLASS zcl_excel_fill_template IMPLEMENTATION.
 
         DESCRIBE FIELD <fs_var> TYPE lv_value_type.
 
-        CHECK  lv_value_type = 'I'
+        CHECK  lv_value_type = cl_abap_typedescr=>typekind_int
             OR lv_value_type = 'P'
             OR lv_value_type = 's'
-            OR lv_value_type = '8'
+            OR lv_value_type = <fs_typekind_int8>
             OR lv_value_type = 'a'
             OR lv_value_type = 'e'
             OR lv_value_type = 'F'.
 
         CASE lv_value_type.
           WHEN cl_abap_typedescr=>typekind_int OR cl_abap_typedescr=>typekind_int1 OR cl_abap_typedescr=>typekind_int2
-            OR cl_abap_typedescr=>typekind_int8. "Allow INT8 types columns
+            OR <fs_typekind_int8>. "Allow INT8 types columns
             lo_addit = cl_abap_elemdescr=>get_i( ).
             CREATE DATA lo_value_new TYPE HANDLE lo_addit.
             ASSIGN lo_value_new->* TO <fs_numeric>.
@@ -371,30 +394,30 @@ CLASS zcl_excel_fill_template IMPLEMENTATION.
       INSERT <fs_sheet_content> INTO TABLE lo_worksheet->sheet_content.
     ENDLOOP.
 
-data(merged_cells) = lo_worksheet->get_merge( ).
-LOOP AT merged_cells ASSIGNING FIELD-SYMBOL(<merged_cell>).
-ZCL_excel_common=>convert_range2column_a_row(
-  EXPORTING
-    i_range        = <merged_cell>
-  IMPORTING
-    e_column_start = data(column_start)
+    DATA(merged_cells) = lo_worksheet->get_merge( ).
+    LOOP AT merged_cells ASSIGNING FIELD-SYMBOL(<merged_cell>).
+      zcl_excel_common=>convert_range2column_a_row(
+        EXPORTING
+          i_range        = <merged_cell>
+        IMPORTING
+          e_column_start = DATA(column_start)
 *    e_column_end   =
-    e_row_start    = data(row_start)
+          e_row_start    = DATA(row_start)
 *    e_row_end      =
 *    e_sheet        =
-).
+      ).
 *  CATCH zcx_excel.    "
-lo_worksheet->delete_merge( ip_cell_column = column_start ip_cell_row = row_start ).
-ENDLOOP.
+      lo_worksheet->delete_merge( ip_cell_column = column_start ip_cell_row = row_start ).
+    ENDLOOP.
 *    REFRESH  lo_worksheet->mt_merged_cells.
 
     LOOP AT lt_merged_cells ASSIGNING <fs_merged_cell>.
-    lo_worksheet->set_merge(
+      lo_worksheet->set_merge(
 *      EXPORTING
-        ip_column_start = <fs_merged_cell>-col_from
-        ip_column_end   = <fs_merged_cell>-col_to
-        ip_row          = <fs_merged_cell>-row_from
-        ip_row_to       = <fs_merged_cell>-row_to ).
+          ip_column_start = <fs_merged_cell>-col_from
+          ip_column_end   = <fs_merged_cell>-col_to
+          ip_row          = <fs_merged_cell>-row_from
+          ip_row_to       = <fs_merged_cell>-row_to ).
 *      CATCH zcx_excel.    "
 *      INSERT <fs_merged_cell> INTO TABLE lo_worksheet->mt_merged_cells.
     ENDLOOP.
@@ -429,7 +452,7 @@ ENDLOOP.
 
     LOOP AT mt_sheet ASSIGNING <fs_sheet>.
 
-      lo_worksheet ?= io_excel->get_worksheet_by_name(  <fs_sheet> ).
+      lo_worksheet ?= mo_excel->get_worksheet_by_name(  <fs_sheet> ).
       row = 1.
       column = 1.
 
@@ -496,9 +519,8 @@ ENDLOOP.
       lo_range_iterator      TYPE REF TO cl_object_collection_iterator,
       lo_range               TYPE REF TO zcl_excel_range.
 
-    mo_excel = io_excel.
 
-    lo_worksheets_iterator = io_excel->get_worksheets_iterator( ).
+    lo_worksheets_iterator = mo_excel->get_worksheets_iterator( ).
 
 
     WHILE lo_worksheets_iterator->has_next( ) = 'X'.
@@ -506,7 +528,7 @@ ENDLOOP.
       APPEND lo_worksheet->get_title( ) TO mt_sheet.
     ENDWHILE.
 
-    lo_range_iterator = io_excel->get_ranges_iterator( ).
+    lo_range_iterator = mo_excel->get_ranges_iterator( ).
 
     WHILE lo_range_iterator->has_next(  ) = 'X'.
       lo_range ?= lo_range_iterator->get_next( ).
@@ -572,27 +594,27 @@ ENDLOOP.
     SPLIT start AT '$' INTO TABLE lt_str.
 
     IF lines( lt_str ) > 2.
-try.
-ZCL_EXCEL_COMMON=>convert_range2column_a_row(
-  EXPORTING
-    i_range        = VALUE
-  IMPORTING
-    e_column_start = data(column_start)
-    e_column_end   = data(column_end)
-    e_row_start    = data(row_start)
-    e_row_end      = DATA(row_end)
-).
-  CATCH zcx_excel.    "
-      RETURN.
-  endtry.
-if column_start = 'A' and column_end = 'XFD'.
-lv_start = |{ row_start }|.
-lv_stop = |{ row_end }|.
-CLEAR lt_str.
-CLEAR stop.
-else.
-      RETURN.
-    ENDIF.
+      TRY.
+          zcl_excel_common=>convert_range2column_a_row(
+            EXPORTING
+              i_range        = value
+            IMPORTING
+              e_column_start = DATA(column_start)
+              e_column_end   = DATA(column_end)
+              e_row_start    = DATA(row_start)
+              e_row_end      = DATA(row_end)
+          ).
+        CATCH zcx_excel.    "
+          RETURN.
+      ENDTRY.
+      IF column_start = 'A' AND column_end = 'XFD'.
+        lv_start = |{ row_start }|.
+        lv_stop = |{ row_end }|.
+        CLEAR lt_str.
+        CLEAR stop.
+      ELSE.
+        RETURN.
+      ENDIF.
     ENDIF.
 
     READ TABLE lt_str INTO lv_start INDEX 2.

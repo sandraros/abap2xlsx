@@ -364,22 +364,14 @@ ENDMETHOD.
 
   METHOD fill_template.
 
-    DATA: lo_template_filler TYPE REF TO zcl_excel_fill_template,
-          lt_data            TYPE TABLE OF zexcel_s_cell_data,
-          lv_column_alpha    TYPE zexcel_cell_column_alpha.
+    DATA: lo_template_filler TYPE REF TO zcl_excel_fill_template.
 
     FIELD-SYMBOLS:
       <fs_sheet> TYPE zexcel_template_sheet_title,
       <fs_data>  TYPE zexcel_s_template_data.
 
 
-    CREATE OBJECT lo_template_filler .
-
-    lo_template_filler->get_range( me ).
-    lo_template_filler->discard_overlapped( ).
-    lo_template_filler->sign_range( ).
-    lo_template_filler->find_var( me ).
-
+    lo_template_filler = zcl_excel_fill_template=>create( me ).
 
     LOOP AT lo_template_filler->mt_sheet ASSIGNING <fs_sheet>.
 
@@ -388,7 +380,6 @@ ENDMETHOD.
       lo_template_filler->fill_sheet( <fs_data> ).
 
     ENDLOOP.
-
 
   ENDMETHOD.
 

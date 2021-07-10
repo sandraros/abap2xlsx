@@ -30,6 +30,12 @@
     </item>
     <item>
      <ID>S</ID>
+     <KEY>P_OBJID</KEY>
+     <ENTRY>Object ID</ENTRY>
+     <LENGTH>17</LENGTH>
+    </item>
+    <item>
+     <ID>S</ID>
      <KEY>P_PATH</KEY>
      <ENTRY>.</ENTRY>
      <LENGTH>9</LENGTH>
@@ -38,7 +44,7 @@
     <item>
      <ID>S</ID>
      <KEY>P_SMW0</KEY>
-     <ENTRY>Load template from smw0</ENTRY>
+     <ENTRY>Load template from SMW0</ENTRY>
      <LENGTH>31</LENGTH>
     </item>
     <item>
