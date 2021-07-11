@@ -8,66 +8,66 @@
 
 REPORT zdemo_excel_fill_template.
 
-TYPES:  BEGIN OF t_table1,
-    person TYPE string,
-    salary TYPE i.
+TYPES: BEGIN OF t_table1,
+         person TYPE string,
+         salary TYPE i.
 TYPES:  END OF t_table1.
 
 TYPES:  tt_table1 TYPE STANDARD TABLE OF t_table1 WITH DEFAULT KEY.
 
-TYPES:  BEGIN OF t_line1,
-    carrid TYPE string,
-    connid TYPE string,
-    fldate TYPE string,
-    price  TYPE i.
+TYPES: BEGIN OF t_line1,
+         carrid TYPE string,
+         connid TYPE string,
+         fldate TYPE string,
+         price  TYPE i.
 TYPES:  END OF t_line1.
 
 TYPES:  tt_line1 TYPE STANDARD TABLE OF t_line1 WITH DEFAULT KEY.
 
-TYPES:  BEGIN OF t_table2,
-    carrid TYPE string,
-    price  TYPE i,
-    line1  TYPE tt_line1.
+TYPES: BEGIN OF t_table2,
+         carrid TYPE string,
+         price  TYPE i,
+         line1  TYPE tt_line1.
 TYPES:  END OF t_table2.
 
 TYPES:  tt_table2 TYPE STANDARD TABLE OF t_table2 WITH DEFAULT KEY.
 
-TYPES:  BEGIN OF t_sheet1,
-    date   TYPE string,
-    time   TYPE string,
-    user   TYPE string,
-    total  TYPE i,
-    price  TYPE i,
-    table1 TYPE tt_table1,
-    table2 TYPE tt_table2.
+TYPES: BEGIN OF t_sheet1,
+         date   TYPE string,
+         time   TYPE string,
+         user   TYPE string,
+         total  TYPE i,
+         price  TYPE i,
+         table1 TYPE tt_table1,
+         table2 TYPE tt_table2.
 TYPES:  END OF t_sheet1.
 
-TYPES:  BEGIN OF t_table3,
-    person TYPE string,
-    salary TYPE string.
+TYPES: BEGIN OF t_table3,
+         person TYPE string,
+         salary TYPE string.
 TYPES:  END OF t_table3.
 
 TYPES:  tt_table3 TYPE STANDARD TABLE OF t_table3 WITH DEFAULT KEY.
 
-TYPES:  BEGIN OF t_sheet2,
-    date   TYPE string,
-    time   TYPE string,
-    user   TYPE string,
-    total  TYPE i,
-    table3 TYPE tt_table1.
+TYPES: BEGIN OF t_sheet2,
+         date   TYPE string,
+         time   TYPE string,
+         user   TYPE string,
+         total  TYPE i,
+         table3 TYPE tt_table1.
 TYPES:  END OF t_sheet2.
 
 
 FIELD-SYMBOLS: <fs_table1> TYPE t_table1,
-               <fs_line> TYPE t_line1,
+               <fs_line>   TYPE t_line1,
                <fs_table2> TYPE t_table2.
 
 * define variables
-DATA: lo_data TYPE REF TO zcl_excel_template_data,
- gs_sheet1 TYPE   t_sheet1,
- gs_sheet2 TYPE   t_sheet2.
-DATA: lo_excel TYPE REF TO zcl_excel,
-      reader   TYPE REF TO zif_excel_reader.
+DATA: lo_data   TYPE REF TO zcl_excel_template_data,
+      gs_sheet1 TYPE t_sheet1,
+      gs_sheet2 TYPE t_sheet2,
+      lo_excel  TYPE REF TO zcl_excel,
+      reader    TYPE REF TO zif_excel_reader.
 
 
 CONSTANTS: gc_save_file_name TYPE string VALUE 'fill_template_example.xlsx'.
@@ -77,7 +77,7 @@ PARAMETERS: p_smw0 RADIOBUTTON GROUP rad1 DEFAULT 'X'.
 PARAMETERS: p_objid TYPE w3objid OBLIGATORY DEFAULT 'ZEXCEL_DEMO_TEMPLATE'.
 
 PARAMETERS: p_file RADIOBUTTON GROUP rad1.
-PARAMETERS: p_fpath TYPE string OBLIGATORY LOWER CASE DEFAULT 'C:\Users\sadfasdf\Desktop\abap2xlsx\ZABAP2XLSX_EXAMPLE.xlsx'.
+PARAMETERS: p_fpath TYPE string OBLIGATORY LOWER CASE DEFAULT 'c:\temp\whatever.xlsx'.
 
 
 AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_fpath.
@@ -88,8 +88,8 @@ START-OF-SELECTION.
 
   CREATE OBJECT lo_data.
 
-data: lv_date TYPE char10,
-      lv_time TYPE char8.
+  DATA: lv_date TYPE char10,
+        lv_time TYPE char8.
 
   WRITE sy-datum TO lv_date.
   gs_sheet1-date = lv_date.

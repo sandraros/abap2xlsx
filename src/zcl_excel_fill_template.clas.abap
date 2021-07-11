@@ -5,9 +5,27 @@ CLASS zcl_excel_fill_template DEFINITION
 
   PUBLIC SECTION.
 
-    DATA mt_sheet TYPE zexcel_template_t_sheet_title READ-ONLY.
-    DATA mt_range TYPE zexcel_template_t_range READ-ONLY.
-    DATA mt_var TYPE zexcel_template_t_var READ-ONLY.
+    TYPES: BEGIN OF range,
+             sheet  TYPE zcl_excel_template_data=>sheet_title,
+             name   TYPE zcl_excel_template_data=>sheet_title,
+             start  TYPE zexcel_cell_row,
+             stop   TYPE zexcel_cell_row,
+             id     TYPE zexcel_cell_row,
+             parent TYPE zexcel_cell_row,
+             length TYPE zexcel_cell_row,
+           END OF range,
+           ranges TYPE STANDARD TABLE OF range WITH DEFAULT KEY,
+           BEGIN OF variable,
+             sheet  TYPE zexcel_sheet_title,
+             parent TYPE zexcel_cell_row,
+             name   TYPE zexcel_sheet_title,
+           END OF variable,
+           variables       TYPE STANDARD TABLE OF variable WITH DEFAULT KEY,
+           tt_sheet_titles TYPE STANDARD TABLE OF zexcel_sheet_title WITH DEFAULT KEY.
+
+    DATA mt_sheet TYPE tt_sheet_titles READ-ONLY.
+    DATA mt_range TYPE ranges READ-ONLY.
+    DATA mt_var TYPE variables READ-ONLY.
     DATA mo_excel TYPE REF TO zcl_excel READ-ONLY.
 
     CLASS-METHODS create
@@ -18,20 +36,22 @@ CLASS zcl_excel_fill_template DEFINITION
 
     METHODS fill_sheet
       IMPORTING
-        !iv_data TYPE zexcel_s_template_data .
+        !iv_data TYPE zcl_excel_template_data=>template_data_sheet .
 
   PROTECTED SECTION.
   PRIVATE SECTION.
 
+    TYPES: tt_cell_data_no_key TYPE STANDARD TABLE OF zexcel_s_cell_data WITH EMPTY KEY.
+
     METHODS fill_range
       IMPORTING
-        !iv_sheet              TYPE zexcel_sheet_title
+        !iv_sheet              TYPE zcl_excel_template_data=>sheet_title
         !iv_parent             TYPE zexcel_cell_row
         !iv_data               TYPE data
         VALUE(iv_range_length) TYPE zexcel_cell_row
         !io_sheet              TYPE REF TO zcl_excel_worksheet
       CHANGING
-        !ct_cells              TYPE zexcel_template_t_cell_data
+        !ct_cells              TYPE tt_cell_data_no_key
         !cv_diff               TYPE zexcel_cell_row
         !ct_merged_cells       TYPE zcl_excel_worksheet=>mty_ts_merge .
     METHODS get_range .
@@ -63,10 +83,10 @@ CLASS zcl_excel_fill_template IMPLEMENTATION.
 
   METHOD discard_overlapped.
     DATA:
-       lt_range TYPE zexcel_template_t_range.
+       lt_range TYPE ranges.
     FIELD-SYMBOLS:
-      <fs_range> TYPE zexcel_template_s_range,
-      <fs_tmp>   TYPE zexcel_template_s_range.
+      <fs_range> TYPE range,
+      <fs_tmp>   TYPE range.
 
     SORT mt_range BY sheet  start  stop.
 
@@ -95,9 +115,9 @@ CLASS zcl_excel_fill_template IMPLEMENTATION.
 
   METHOD fill_range.
 
-    DATA: tmp_cells_template        TYPE zexcel_template_t_cell_data,
-          lt_cells_result           TYPE zexcel_template_t_cell_data,
-          tmp_cells                 TYPE zexcel_template_t_cell_data,
+    DATA: tmp_cells_template        TYPE tt_cell_data_no_key,
+          lt_cells_result           TYPE tt_cell_data_no_key,
+          tmp_cells                 TYPE tt_cell_data_no_key,
           ls_cell                   TYPE zexcel_s_cell_data,
 
           tmp_merged_cells_template TYPE zcl_excel_worksheet=>mty_ts_merge,
@@ -120,14 +140,14 @@ CLASS zcl_excel_fill_template IMPLEMENTATION.
           lv_value_type             TYPE c.
 
     FIELD-SYMBOLS:
-      <fs_table>   TYPE ANY TABLE,
-      <fs_line>    TYPE any,
-      <fs_range>   TYPE zexcel_template_s_range,
-      <fs_cell>    TYPE zexcel_s_cell_data,
-      <fs_numeric> TYPE numeric,
-      <fs_result>  TYPE match_result,
-      <fs_var>     TYPE any,
-                   <fs_typekind_int8> TYPE abap_typekind.
+      <fs_table>         TYPE ANY TABLE,
+      <fs_line>          TYPE any,
+      <fs_range>         TYPE range,
+      <fs_cell>          TYPE zexcel_s_cell_data,
+      <fs_numeric>       TYPE numeric,
+      <fs_result>        TYPE match_result,
+      <fs_var>           TYPE any,
+      <fs_typekind_int8> TYPE abap_typekind.
 
 
     cv_diff = cv_diff +  iv_range_length .
@@ -277,10 +297,10 @@ CLASS zcl_excel_fill_template IMPLEMENTATION.
 
     IF sy-subrc = 0.
 
-        ASSIGN ('CL_ABAP_TYPEDESCR=>TYPEKIND_INT8') TO <fs_typekind_int8>.
-        IF sy-subrc <> 0.
-          ASSIGN space TO <fs_typekind_int8>. "not used as typekind!
-        ENDIF.
+      ASSIGN ('CL_ABAP_TYPEDESCR=>TYPEKIND_INT8') TO <fs_typekind_int8>.
+      IF sy-subrc <> 0.
+        ASSIGN space TO <fs_typekind_int8>. "not used as typekind!
+      ENDIF.
 
 
 *      replace variables of current range with data
@@ -358,7 +378,7 @@ CLASS zcl_excel_fill_template IMPLEMENTATION.
   METHOD fill_sheet.
 
     DATA: lo_worksheet     TYPE REF TO zcl_excel_worksheet,
-          lt_sheet_content TYPE  zexcel_template_t_cell_data,
+          lt_sheet_content TYPE tt_cell_data_no_key,
           lt_merged_cells  TYPE zcl_excel_worksheet=>mty_ts_merge,
           lv_dif           TYPE i.
 
@@ -401,28 +421,17 @@ CLASS zcl_excel_fill_template IMPLEMENTATION.
           i_range        = <merged_cell>
         IMPORTING
           e_column_start = DATA(column_start)
-*    e_column_end   =
-          e_row_start    = DATA(row_start)
-*    e_row_end      =
-*    e_sheet        =
-      ).
-*  CATCH zcx_excel.    "
+          e_row_start    = DATA(row_start) ).
       lo_worksheet->delete_merge( ip_cell_column = column_start ip_cell_row = row_start ).
     ENDLOOP.
-*    REFRESH  lo_worksheet->mt_merged_cells.
 
     LOOP AT lt_merged_cells ASSIGNING <fs_merged_cell>.
       lo_worksheet->set_merge(
-*      EXPORTING
           ip_column_start = <fs_merged_cell>-col_from
           ip_column_end   = <fs_merged_cell>-col_to
           ip_row          = <fs_merged_cell>-row_from
           ip_row_to       = <fs_merged_cell>-row_to ).
-*      CATCH zcx_excel.    "
-*      INSERT <fs_merged_cell> INTO TABLE lo_worksheet->mt_merged_cells.
     ENDLOOP.
-
-
 
   ENDMETHOD.
 
@@ -435,7 +444,7 @@ CLASS zcl_excel_fill_template IMPLEMENTATION.
           value          TYPE string,
 
           lo_worksheet   TYPE REF TO zcl_excel_worksheet,
-          ls_var         TYPE zexcel_template_s_var,
+          ls_var         TYPE variable,
 
           highest_column TYPE zexcel_cell_column,
           highest_row    TYPE int4,
@@ -446,8 +455,8 @@ CLASS zcl_excel_fill_template IMPLEMENTATION.
 
     FIELD-SYMBOLS:
       <fs_result> TYPE match_result,
-      <fs_range>  TYPE zexcel_template_s_range,
-      <fs_sheet>  TYPE zexcel_template_sheet_title.
+      <fs_range>  TYPE range,
+      <fs_sheet>  TYPE zexcel_sheet_title.
 
 
     LOOP AT mt_sheet ASSIGNING <fs_sheet>.
@@ -542,8 +551,8 @@ CLASS zcl_excel_fill_template IMPLEMENTATION.
 
     DATA: lv_tabix TYPE i.
     FIELD-SYMBOLS:
-      <fs_range>     TYPE zexcel_template_s_range,
-      <fs_range_tmp> TYPE zexcel_template_s_range.
+      <fs_range>     TYPE range,
+      <fs_range_tmp> TYPE range.
 
     LOOP AT mt_range ASSIGNING <fs_range>.
       <fs_range>-id = sy-tabix.
@@ -580,7 +589,7 @@ CLASS zcl_excel_fill_template IMPLEMENTATION.
           lv_start TYPE string,
           lv_stop  TYPE string.
 
-    FIELD-SYMBOLS: <fs_range> TYPE zexcel_template_s_range.
+    FIELD-SYMBOLS: <fs_range> TYPE range.
 
 
     name = io_range->name.

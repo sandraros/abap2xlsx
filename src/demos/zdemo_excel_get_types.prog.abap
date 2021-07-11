@@ -143,7 +143,7 @@ FORM get_types .
 ENDFORM.
 
 
-FORM get_type_r USING p_sheet TYPE zexcel_template_sheet_title
+FORM get_type_r USING p_sheet TYPE zexcel_sheet_title
                       p_parent  TYPE i
                 CHANGING ct_result TYPE tt_text.
 
@@ -154,7 +154,7 @@ FORM get_type_r USING p_sheet TYPE zexcel_template_sheet_title
 
   FIELD-SYMBOLS: <fs_buf>   TYPE text80,
                  <fs_range> LIKE LINE OF template_filler->mt_range,
-                 <fs_var>   TYPE zexcel_template_s_var.
+                 <fs_var>   TYPE zcl_excel_fill_template=>variable.
 
 
   CLEAR ct_result.
@@ -179,8 +179,9 @@ FORM get_type_r USING p_sheet TYPE zexcel_template_sheet_title
   IF p_parent = 0.
     lv_name = p_sheet.
   ELSE.
-    READ TABLE template_filler->mt_range ASSIGNING <fs_range> WITH KEY sheet = p_sheet
-                                                      id = p_parent.
+    READ TABLE template_filler->mt_range ASSIGNING <fs_range>
+        WITH KEY sheet = p_sheet
+                 id    = p_parent.
     lv_name = <fs_range>-name.
   ENDIF.
 
@@ -192,8 +193,8 @@ FORM get_type_r USING p_sheet TYPE zexcel_template_sheet_title
   ENDIF.
 
 
-  LOOP AT template_filler->mt_var ASSIGNING <fs_var> WHERE sheet = p_sheet
-                                                    AND parent = p_parent.
+  LOOP AT template_filler->mt_var ASSIGNING <fs_var> WHERE sheet  = p_sheet
+                                                       AND parent = p_parent.
 
     APPEND INITIAL LINE TO lt_buf ASSIGNING <fs_buf>.
     IF p_normal IS INITIAL.
@@ -207,8 +208,8 @@ FORM get_type_r USING p_sheet TYPE zexcel_template_sheet_title
 
   ADD sy-subrc TO lv_sum.
 
-  LOOP AT template_filler->mt_range ASSIGNING <fs_range> WHERE sheet = p_sheet
-                                                        AND parent = p_parent.
+  LOOP AT template_filler->mt_range ASSIGNING <fs_range> WHERE sheet  = p_sheet
+                                                           AND parent = p_parent.
 
     APPEND INITIAL LINE TO lt_buf ASSIGNING <fs_buf>.
     IF p_normal IS INITIAL.

@@ -367,8 +367,8 @@ ENDMETHOD.
     DATA: lo_template_filler TYPE REF TO zcl_excel_fill_template.
 
     FIELD-SYMBOLS:
-      <fs_sheet> TYPE zexcel_template_sheet_title,
-      <fs_data>  TYPE zexcel_s_template_data.
+      <fs_sheet> TYPE zexcel_sheet_title,
+      <fs_data>  TYPE zcl_excel_template_data=>template_data_sheet.
 
 
     lo_template_filler = zcl_excel_fill_template=>create( me ).

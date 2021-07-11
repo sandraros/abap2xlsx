@@ -3935,18 +3935,19 @@ ENDMETHOD.
 
 
   METHOD zif_excel_reader~load_smw0.
-    DATA: lv_excel_data TYPE xstring,
-          lt_mime       TYPE TABLE OF w3mime.
+    DATA: lv_excel_data   TYPE xstring,
+          lt_mime         TYPE TABLE OF w3mime,
+          ls_key          TYPE wwwdatatab,
+          lv_errormessage TYPE string,
+          lv_filesize     TYPE i,
+          lv_filesizec    TYPE c LENGTH 10.
 
 *--------------------------------------------------------------------*
 * Read file into binary string
 *--------------------------------------------------------------------*
-data
-      : ls_key TYPE wwwdatatab
-      .
 
-       ls_key-relid = 'MI'.
-       ls_key-objid = iv_w3objid .
+    ls_key-relid = 'MI'.
+    ls_key-objid = iv_w3objid .
 
     CALL FUNCTION 'WWWDATA_IMPORT'
       EXPORTING
@@ -3956,14 +3957,29 @@ data
       EXCEPTIONS
         OTHERS = 1.
     IF sy-subrc <> 0.
-      RETURN.
+      lv_errormessage = 'A problem occured when reading the MIME object'(004).
+      zcx_excel=>raise_text( lv_errormessage ).
     ENDIF.
 
-    TRY.
-        lv_excel_data = cl_bcs_convert=>xtab_to_xstring( lt_mime ).
-      CATCH cx_bcs.
-        RETURN.
-    ENDTRY.
+    CALL FUNCTION 'WWWPARAMS_READ'
+      EXPORTING
+        relid = ls_key-relid
+        objid = ls_key-objid
+        name  = 'filesize'
+      IMPORTING
+        value = lv_filesizec.
+
+    lv_filesize = lv_filesizec.
+    CALL FUNCTION 'SCMS_BINARY_TO_XSTRING'
+      EXPORTING
+        input_length = lv_filesize
+      IMPORTING
+        buffer       = lv_excel_data
+      TABLES
+        binary_tab   = lt_mime
+      EXCEPTIONS
+        failed       = 1
+        OTHERS       = 2.
 
 *--------------------------------------------------------------------*
 * Parse Excel data into ZCL_EXCEL object from binary string
